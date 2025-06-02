@@ -1,0 +1,32 @@
+[Unit]
+Description=Attach BPF obfuscation tc filters for WireGuard to %i
+Requires=sys-subsystem-net-devices-%i.device
+After=sys-subsystem-net-devices-%i.device
+Before=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+# Handle for the filter, adjust as needed
+Environment=FILTER_HANDLE=0xca6c
+Environment=FILTER_PREF=4096
+Environment=BPF_PROG_PATH=/usr/local/lib/wg-bpf-obfus.o
+
+ExecStart=/bin/sh -c '\
+    /usr/sbin/tc qdisc add dev %i clsact || true; \
+    /usr/sbin/tc filter add dev %i ingress \
+    pref $FILTER_PREF handle $FILTER_HANDLE \
+    bpf da obj $BPF_PROG_PATH sec classifier; \
+    /usr/sbin/tc filter add dev %i egress \
+    pref $FILTER_PREF handle $FILTER_HANDLE \
+    bpf da obj $BPF_PROG_PATH sec classifier'
+
+ExecStop=/bin/sh -c '\
+    /usr/sbin/tc filter del dev %i ingress \
+    pref $FILTER_PREF handle $FILTER_HANDLE bpf || true; \
+    /usr/sbin/tc filter del dev %i egress \
+    pref $FILTER_PREF handle $FILTER_HANDLE bpf || true;'
+
+[Install]
+WantedBy=multi-user.target
